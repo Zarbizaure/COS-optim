@@ -77,27 +77,96 @@ public class AcquisitionPlannerGreedy {
 
 		}
 
-		Collections.sort(acquWindowP0Sorted,cloudComparator);
-		Collections.sort(acquWindowP1Sorted,cloudComparator);
+		Collections.sort(acquWindowP0Sorted,startTimeComparator);
+		Collections.sort(acquWindowP1Sorted,startTimeComparator);
 		
+		Map<Satellite,List<AcquisitionWindow>> concerned = new HashMap<Satellite,List<AcquisitionWindow>>();
+		Map<Satellite,Map<AcquisitionWindow,Integer>> tabOptim = new HashMap<Satellite,Map<AcquisitionWindow,Integer>>();
+		Map<Satellite,Map<AcquisitionWindow,AcquisitionWindow>> previous = new HashMap<Satellite,Map<AcquisitionWindow,AcquisitionWindow>>();
+		Map<Satellite,Map<AcquisitionWindow,Double>> bestEndTime = new HashMap<Satellite,Map<AcquisitionWindow,Double>>();
+
+		for (Satellite sat : planningProblem.satellites) {
+			concerned.put(sat,new ArrayList<AcquisitionWindow>());
+			tabOptim.put(sat, new HashMap<AcquisitionWindow,Integer>());
+			previous.put(sat, new HashMap<AcquisitionWindow,AcquisitionWindow>());
+			bestEndTime.put(sat, new HashMap<AcquisitionWindow,Double>());
+		}
+
 		while(!acquWindowP0Sorted.isEmpty()){
-			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
+			// We select the earliest acquisitionWindow and do related computations
 			AcquisitionWindow acqWindow = acquWindowP0Sorted.remove(0);
-			// try to plan one acquisition window for this acquisition (and stop once a feasible acquisition window is found
-			Satellite satellite = acqWindow.satellite;
-			CandidateAcquisition acq = acqWindow.candidateAcquisition;
-			SatellitePlan satellitePlan = satellitePlans.get(satellite);
-			if (candidateAcquisitionsP0.contains(acq)) {
-				satellitePlan.add(acqWindow);
-				if(satellitePlan.isFeasible()){
-					nPlanned++;
-					acq.selectedAcquisitionWindow = acqWindow;
-					candidateAcquisitionsP0.remove(acq);
+			Satellite sat = acqWindow.satellite;
+
+			List<AcquisitionWindow> listAcq = concerned.get(sat);
+			Map<AcquisitionWindow,Integer> tabOptimHere = tabOptim.get(sat);
+			Map<AcquisitionWindow,AcquisitionWindow> previousMap = previous.get(sat);
+			Map<AcquisitionWindow,Double> bestEndTimeMap = bestEndTime.get(sat);
+
+			int bestCompatible = 0;
+			double bestCompatibleStartTime = acqWindow.earliestStart;
+			AcquisitionWindow bestAcqFound = acqWindow;	/* Not to be used without update */
+
+			/* Find the best previous acquisition */
+			for(AcquisitionWindow prevAcq : listAcq){
+				double prevAcqEndTime = bestEndTimeMap.get(prevAcq);
+				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevAcq, acqWindow);
+				double startTime = Math.max(prevAcqEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
+
+				if (tabOptimHere.get(prevAcq) > bestCompatible){
+					if (startTime < acqWindow.latestStart) {
+						bestAcqFound = prevAcq;
+						bestCompatible = tabOptimHere.get(prevAcq);
+						bestCompatibleStartTime = startTime;
+					}
+				else if(tabOptimHere.get(prevAcq) == bestCompatible){
+					if (startTime < bestCompatibleStartTime) {
+						bestAcqFound = prevAcq;
+						bestCompatibleStartTime = startTime;
+					}
 				}
-				else
-					satellitePlan.remove(acqWindow);
+				}
+			}
+			/* Update the fields of the map concerning the current acquisition window */
+			listAcq.add(acqWindow);
+			if (bestCompatible == 0) {
+				tabOptimHere.put(acqWindow,bestCompatible+1); /*Poids de l'acquisition*/
+				bestEndTimeMap.put(acqWindow,bestCompatibleStartTime+acqWindow.duration);
+			}
+			else{
+				tabOptimHere.put(acqWindow,bestCompatible+1); /*Poids de l'acquisition*/
+				bestEndTimeMap.put(acqWindow,bestCompatibleStartTime+acqWindow.duration);
+				previousMap.put(acqWindow,bestAcqFound);
 			}
 		}
+
+		/* Making the real planification */
+		for (Satellite sat : planningProblem.satellites) {
+			SatellitePlan satellitePlan = satellitePlans.get(sat);
+			List<AcquisitionWindow> listAcq = concerned.get(sat);
+			Map<AcquisitionWindow,Integer> tabOptimHere = tabOptim.get(sat);
+			Map<AcquisitionWindow,AcquisitionWindow> previousMap = previous.get(sat);
+
+			/* Find max in tabOptimHere */
+			int nPlannedsat = 0;
+			AcquisitionWindow acqOpti = listAcq.get(0); /* Not to be used without modification */
+			for (AcquisitionWindow acqWindow : listAcq) {
+				if (tabOptimHere.get(acqWindow) > nPlannedsat){
+					nPlannedsat = tabOptimHere.get(acqWindow);
+					acqOpti = acqWindow ;
+				}
+			}
+
+			/* Get up in previous to find the corresponding acqwindows and update the plan */
+			while (nPlannedsat>0){
+				if (isset(acqOpti.candidateAcquisition.selectedAcquisitionWindow)) {
+					satellitePlan.add(acqOpti);
+					acqOpti = previousMap.get(acqOpti);
+					nPlanned++;
+				}
+				nPlannedsat --;
+			}
+		}
+
 		while(!acquWindowP1Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
 			AcquisitionWindow acqWindow = acquWindowP1Sorted.remove(0);
@@ -118,6 +187,7 @@ public class AcquisitionPlannerGreedy {
 		}
 		System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
+
 
 
 	private class SatellitePlan {
