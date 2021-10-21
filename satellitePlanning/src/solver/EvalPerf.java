@@ -126,7 +126,7 @@ public class EvalPerf {
 		System.out.println("Acquisition Prio1 (plan/cand): " + String.format("%.2f",ratioByPriority[1]) + " (" + resPlan.cntByPriority[1] + "/" + resCand.cntByPriority[1] + ")");
 
 		System.out.println("Acquisition Cloud (plan/cand): " + String.format("%.2f",ratioByCoverage) + " (" + String.format("%.2f",resPlan.cntByCoverage) + "/" +  String.format("%.2f",resCand.cntByCoverage) + ")");
-
+		
 	}
 
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException, ParseException{

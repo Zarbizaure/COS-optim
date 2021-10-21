@@ -24,6 +24,7 @@ import problem.CandidateAcquisition;
 import problem.PlanningProblem;
 import problem.ProblemParserXML;
 import problem.Satellite;
+import solver.EvalPerf;
 
 
 /**
@@ -37,28 +38,36 @@ public class AcquisitionPlannerACO {
 	/** Planning problem for which this acquisition planner is used */
 	private final PlanningProblem planningProblem;
 	/** Data structure used for storing the plan of each satellite */
-	private final Map<Satellite,SatellitePlan> satellitePlans;
+	private Map<Satellite,SatellitePlan> satellitePlans;
 	/**Data for the weights */
 	private Map<AcquisitionWindow,Double> weightsMap;
 
 	private List<AcquisitionWindow> selectedWindows;
 
-
-	private int searchDepth = 50;
+	private final int searchDepth;
 
 	
 	/**
 	 * Build an acquisition planner for a planning problem
 	 * @param planningProblem
 	 */
-	public AcquisitionPlannerACO(PlanningProblem planningProblem){
+	public AcquisitionPlannerACO(PlanningProblem planningProblem, int searchDepth){
 		this.planningProblem = planningProblem;
+		this.searchDepth = searchDepth;
 		satellitePlans = new HashMap<Satellite,SatellitePlan>();
 		for(Satellite satellite : planningProblem.satellites){
 			satellitePlans.put(satellite, new SatellitePlan());
 		}
 		// Initialize weights
 		initializeWeightMap(planningProblem.acquisitionWindows);
+	}
+
+	/** Reset but keep weigths */
+	public void reset(){
+		satellitePlans = new HashMap<Satellite,SatellitePlan>();
+		for(Satellite satellite : planningProblem.satellites){
+			satellitePlans.put(satellite, new SatellitePlan());
+		}
 	}
 
 	public void initializeWeightMap(List<AcquisitionWindow> acqWindowList){
@@ -87,7 +96,7 @@ public class AcquisitionPlannerACO {
 		for (AcquisitionWindow aw : selectedWindows){
 			// Double weight = acquWindow.cloudProba*(1-0.5*acquWindow.candidateAcquisition.priority);
 			double currentWeigth = weightsMap.get(aw);
-			double  newWeigth = currentWeigth*score;
+			double  newWeigth = currentWeigth + score;
 			weightsMap.put(aw, newWeigth);
 		}
 	}
@@ -123,8 +132,8 @@ public class AcquisitionPlannerACO {
 
 		}
 
-		// Collections.sort(acqWindowP0Sorted,cloudComparator);
-		// Collections.sort(acqWindowP1Sorted,cloudComparator);
+		Collections.sort(acqWindowP0Sorted,startTimeComparator);
+		Collections.sort(acqWindowP1Sorted,startTimeComparator);
 		
 		while(!acqWindowP0Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
@@ -337,7 +346,7 @@ public class AcquisitionPlannerACO {
 
 	public Integer[] cntByPriority = {0, 0};
 	public Integer cntTotal = 0;
-	public Double cntByCoverage = 0.0;
+	public double cntByCoverage = 0.0;
 
 	public void getSelectedWindows() {
 		// Reset count
@@ -348,16 +357,31 @@ public class AcquisitionPlannerACO {
 		}
 	}
 
-	public double computeFitness() {
+	public double computeReferenceFitness(){
+		List<AcquisitionWindow> awList = selectBestWindows();
+		return computeFitness(awList, 100.0);
+	}
+
+	public List<AcquisitionWindow> selectBestWindows() { // select best window by coverage
+		List<AcquisitionWindow> awList = new ArrayList<AcquisitionWindow>();
+		for (CandidateAcquisition acquisition : planningProblem.candidateAcquisitions) {
+			awList.add(Collections.max(acquisition.acquisitionWindows, cloudComparator));
+		}
+		return awList;
+	}
+
+	public double computeFitness(List<AcquisitionWindow> awList, double referenceFitness) {
 		// Reset count
 		cntTotal = 0;
 		cntByCoverage = 0.0;
+
 		// Count
-		for (AcquisitionWindow aw : selectedWindows) {
+		for (AcquisitionWindow aw : awList) {
 			Acquisition acq = aw.candidateAcquisition;
 			this.cntByCoverage += (1-aw.cloudProba);
 		}
-		return cntByCoverage;
+		double fitness = 100*cntByCoverage / referenceFitness;
+		return fitness;
 	}
 
 	public Integer[] computeAmount(){
@@ -388,6 +412,13 @@ public class AcquisitionPlannerACO {
 		}		
 	};
 
+	private final Comparator<AcquisitionWindow> priorityComparator = new Comparator<AcquisitionWindow>(){
+		@Override
+		public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
+			return Double.compare(w0.candidateAcquisition.priority, w1.candidateAcquisition.priority);
+		}		
+	};
+
 	/**
 	 * Write the acquisition plan of a given satellite in a file
 	 * @param satellite
@@ -408,23 +439,31 @@ public class AcquisitionPlannerACO {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
+		int nRuns = 100;
+		int searchDepth = 50;
+
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
-		AcquisitionPlannerACO planner = new AcquisitionPlannerACO(pb);
+		AcquisitionPlannerACO planner = new AcquisitionPlannerACO(pb, searchDepth);
 
-		int nRuns = 20;
+		// Reference fitness
+		double referenceFitness = planner.computeReferenceFitness();
+		System.out.println("Reference Fitness " + String.format("% .2f", referenceFitness));
+
 		for (int i=0; i<nRuns; i++){
-			planner = new AcquisitionPlannerACO(pb);
 			planner.planAcquisitions();	
 			// Evaluate fitness
 			planner.getSelectedWindows();
-			double score = planner.computeFitness();
+			double score = planner.computeFitness(planner.selectedWindows, referenceFitness);
 			Integer[] count = planner.computeAmount();
-			System.out.println("Generation " + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + score);
+
+			double val0 = planner.weightsMap.get(pb.acquisitionWindows.get(41));
+			System.out.println("Generation " + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + String.format("% .2f", score) + " | Value0 " + String.format("% .2f", val0));
 
 			planner.updateWeightMap(score);
-			planner.decayWeightMap(0.95);
+			planner.decayWeightMap(0.5);
+			planner.reset();
 		}
 
 		for(Satellite satellite : pb.satellites){
