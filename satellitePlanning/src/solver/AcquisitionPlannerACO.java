@@ -41,8 +41,10 @@ public class AcquisitionPlannerACO {
 	/**Data for the weights */
 	private Map<AcquisitionWindow,Double> weightsMap;
 
+	private List<AcquisitionWindow> selectedWindows;
 
-	private int searchDepth = 10;
+
+	private int searchDepth = 50;
 
 	
 	/**
@@ -59,12 +61,34 @@ public class AcquisitionPlannerACO {
 		initializeWeightMap(planningProblem.acquisitionWindows);
 	}
 
-	public void initializeWeightMap(List<AcquisitionWindow> acquWindowList){
+	public void initializeWeightMap(List<AcquisitionWindow> acqWindowList){
 		weightsMap = new HashMap<AcquisitionWindow,Double>();
-		for (AcquisitionWindow acquWindow : acquWindowList){
+		for (AcquisitionWindow aw : acqWindowList){
 			// Double weight = acquWindow.cloudProba*(1-0.5*acquWindow.candidateAcquisition.priority);
-			Double weight = 1 - acquWindow.cloudProba;
-			weightsMap.put(acquWindow, weight);
+			Double weight = getInitialWeigth(aw);
+			weightsMap.put(aw, weight);
+		}
+	}
+
+	public double getInitialWeigth(AcquisitionWindow aw){
+		return 1 - aw.cloudProba;
+	}
+
+	public void decayWeightMap(double decayRate){
+		for (AcquisitionWindow aw : weightsMap.keySet()){
+			// Double weight = acquWindow.cloudProba*(1-0.5*acquWindow.candidateAcquisition.priority);
+			double currentWeigth = weightsMap.get(aw);
+			double  newWeigth = Math.max(currentWeigth * decayRate, getInitialWeigth(aw));
+			weightsMap.put(aw, newWeigth);
+		}
+	}
+
+	public void updateWeightMap(double score){
+		for (AcquisitionWindow aw : selectedWindows){
+			// Double weight = acquWindow.cloudProba*(1-0.5*acquWindow.candidateAcquisition.priority);
+			double currentWeigth = weightsMap.get(aw);
+			double  newWeigth = currentWeigth*score;
+			weightsMap.put(aw, newWeigth);
 		}
 	}
 
@@ -107,12 +131,10 @@ public class AcquisitionPlannerACO {
 			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP0Selected,acqWindowP0Sorted, searchDepth);
 			acqWindowP0Sorted = selectorContainer.acquisitionList;
 			AcquisitionWindow acqWindow = selectorContainer.acquisition;
-			//System.out.println("nRemainingCandidatesP0: " + acqWindowP0Sorted.size());
 			if (Objects.nonNull(acqWindow)){
 				Acquisition acq = acqWindow.candidateAcquisition;
 				acqP0Selected.add(acq);
 				nPlanned++;
-				// System.out.println("selected acqWindow tstart=" + acqWindow.earliestStart);
 			}
 		}
 		while(!acqWindowP1Sorted.isEmpty()){
@@ -125,10 +147,9 @@ public class AcquisitionPlannerACO {
 				Acquisition acq = acqWindow.candidateAcquisition;
 				acqP1Selected.add(acq);
 				nPlanned++;
-				// System.out.println("selected acqWindow tstart=" + acqWindow.earliestStart);
 			}
 		}
-		System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
+		// System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
 
 	private AcquisitionSelectorContainer selectRandom(List<Acquisition> acqSelected, List<AcquisitionWindow> acqWindowSorted, int searchDepth) {
@@ -163,7 +184,7 @@ public class AcquisitionPlannerACO {
 		}
 		
 		// Select a random acquisition based on the computed weigths and add it to the corresponding satellitePlan
-		Random rand = new Random(System.currentTimeMillis());
+		Random rand = new Random(System.nanoTime());
 		AcquisitionWindow acqWindow = selectWeightedAcquisitionWindow(rand, acqWindowFirstsValid, weightsMap, weightsSum);
 		Satellite satellite = acqWindow.satellite;
 		SatellitePlan satellitePlan = satellitePlans.get(satellite);
@@ -279,8 +300,6 @@ public class AcquisitionPlannerACO {
 				// Else try to insert it between existing acqWindows
 
 				for (int i=0;i<acqWindows.size();i++){
-					System.out.println(acqWindows.size());
-
 					AcquisitionWindow acqWindowPrev = acqWindows.get(i);
 					double rollAngleTransitionTimePrev = planningProblem.getTransitionTime(acqWindowPrev, acqWindow);
 					double startCandidate = endTimes.get(acqWindowPrev) + rollAngleTransitionTimePrev;
@@ -311,6 +330,47 @@ public class AcquisitionPlannerACO {
 			}
 		}
 
+
+
+	}
+
+
+	public Integer[] cntByPriority = {0, 0};
+	public Integer cntTotal = 0;
+	public Double cntByCoverage = 0.0;
+
+	public void getSelectedWindows() {
+		// Reset count
+		selectedWindows = new ArrayList<AcquisitionWindow>();
+		// Count
+		for (Satellite satellite: planningProblem.satellites) {
+			selectedWindows.addAll(satellitePlans.get(satellite).acqWindows);
+		}
+	}
+
+	public double computeFitness() {
+		// Reset count
+		cntTotal = 0;
+		cntByCoverage = 0.0;
+		// Count
+		for (AcquisitionWindow aw : selectedWindows) {
+			Acquisition acq = aw.candidateAcquisition;
+			this.cntByCoverage += (1-aw.cloudProba);
+		}
+		return cntByCoverage;
+	}
+
+	public Integer[] computeAmount(){
+		cntByPriority[0] = 0;
+		cntByPriority[1] = 0;
+		cntTotal = 0;
+		// Count
+		for (AcquisitionWindow aw : selectedWindows) {
+			Acquisition acq = aw.candidateAcquisition;
+			this.cntByPriority[acq.priority] += 1;
+			this.cntTotal += 1; 
+		}
+		return cntByPriority;
 	}
 
 	/** Comparator used for sorting acquisition windows by increasing earliest start time */
@@ -352,7 +412,21 @@ public class AcquisitionPlannerACO {
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
 		AcquisitionPlannerACO planner = new AcquisitionPlannerACO(pb);
-		planner.planAcquisitions();	
+
+		int nRuns = 20;
+		for (int i=0; i<nRuns; i++){
+			planner = new AcquisitionPlannerACO(pb);
+			planner.planAcquisitions();	
+			// Evaluate fitness
+			planner.getSelectedWindows();
+			double score = planner.computeFitness();
+			Integer[] count = planner.computeAmount();
+			System.out.println("Generation " + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + score);
+
+			planner.updateWeightMap(score);
+			planner.decayWeightMap(0.95);
+		}
+
 		for(Satellite satellite : pb.satellites){
 			planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
 		}
