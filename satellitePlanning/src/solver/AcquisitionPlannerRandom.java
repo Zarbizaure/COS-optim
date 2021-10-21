@@ -4,12 +4,14 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.text.FieldPosition;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 
 import javax.xml.stream.FactoryConfigurationError;
@@ -90,17 +92,23 @@ public class AcquisitionPlannerRandom {
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
 			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP0Selected,acquWindowP0Sorted, searchDepth);
 			acquWindowP0Sorted = selectorContainer.acquisitionList;
-			AcquisitionWindow acqWindow = selectorContainer.acquisition;
-			Acquisition acq = acqWindow.candidateAcquisition;
-			acqP0Selected.add(acq);
+			if (!acquWindowP0Sorted.isEmpty()) {
+				AcquisitionWindow acqWindow = selectorContainer.acquisition;
+				Acquisition acq = acqWindow.candidateAcquisition;
+				acqP0Selected.add(acq);
+				nPlanned = nPlanned + 1;
+			}
 		}
 		while(!acquWindowP1Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
 			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP1Selected,acquWindowP1Sorted, searchDepth);
 			acquWindowP1Sorted = selectorContainer.acquisitionList;
-			AcquisitionWindow acqWindow = selectorContainer.acquisition;
-			Acquisition acq = acqWindow.candidateAcquisition;
-			acqP1Selected.add(acq);
+			if (!acquWindowP1Sorted.isEmpty()) {
+				AcquisitionWindow acqWindow = selectorContainer.acquisition;
+				Acquisition acq = acqWindow.candidateAcquisition;
+				acqP1Selected.add(acq);
+				nPlanned = nPlanned + 1;
+			}
 		}
 		System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
@@ -127,8 +135,9 @@ public class AcquisitionPlannerRandom {
 		}
 		
 		// no valid acquisition window
+		// Return empty list & null acquisition window
 		if (weightsMap.isEmpty()) { 
-			return new AcquisitionSelectorContainer(acquWindowSorted,null);
+			return new AcquisitionSelectorContainer(new ArrayList<AcquisitionWindow>(), null);
 		}
 		
 		// Select a random acquisition based on the computed weigths and add it to the corresponding satellitePlan
@@ -145,16 +154,16 @@ public class AcquisitionPlannerRandom {
 	public AcquisitionWindow selectWeightedAcquisitionWindow(Random rand, Map<AcquisitionWindow,Double> weightsMap, double weightsSum) {
 		double randomValue = rand.nextDouble()*weightsSum;
         double currentSum = 0.0;
-		AcquisitionWindow selectecAcqWindow = null;
+		AcquisitionWindow selectedAcqWindow = null;
 		
         for (AcquisitionWindow acqWindow : weightsMap.keySet()){
             if (randomValue < currentSum + weightsMap.get(acqWindow)){
                 return acqWindow;
             }
             currentSum+= weightsMap.get(acqWindow);
-            selectecAcqWindow = acqWindow;
+            selectedAcqWindow = acqWindow;
         }
-        return selectecAcqWindow;
+        return selectedAcqWindow;
 	}
 
 
@@ -213,7 +222,14 @@ public class AcquisitionPlannerRandom {
 		}
 
 		public double getStart(AcquisitionWindow aw){
-			return startTimes.get(aw);
+			AcquisitionWindow aw1 = aw;
+			try{
+				return startTimes.get(aw);
+			} catch(Exception javaException){
+				System.out.println("Fail");
+				return 0;
+			}
+				
 		}
 
 		public double getEnd(AcquisitionWindow aw){
