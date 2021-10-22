@@ -55,132 +55,143 @@ public class AcquisitionPlannerGreedy {
 	 */
 	public void planAcquisitions(){
 
+		class Task {
+			AcquisitionWindow acqWindow;
+			double time;
+			double score;
+
+			public Task(AcquisitionWindow aw, double t) {
+				acqWindow = aw;
+				time = t;
+				score = 0;
+			}
+		}
+		final Comparator<Task> theComparator = new Comparator<Task>(){
+			@Override
+			public int compare(Task task0, Task task1) {
+				return Double.compare(task0.time, task1.time);
+			}		
+		};
+
 		List<CandidateAcquisition> candidateAcquisitions = new ArrayList<CandidateAcquisition>(planningProblem.candidateAcquisitions);
 		int nCandidates = candidateAcquisitions.size();
 		int nPlanned = 0;
-		List<CandidateAcquisition> candidateAcquisitionsP0 = new ArrayList<CandidateAcquisition>();
-		List<CandidateAcquisition> candidateAcquisitionsP1 = new ArrayList<CandidateAcquisition>();
-		List<AcquisitionWindow> acquWindowP0Sorted = new ArrayList<AcquisitionWindow>();
-		List<AcquisitionWindow> acquWindowP1Sorted = new ArrayList<AcquisitionWindow>();
-		List<AcquisitionWindow> acquWindowSorted = new ArrayList<AcquisitionWindow>();
 
 
+		List<Task> taskSorted = new ArrayList<Task>();
 
-		for (CandidateAcquisition Acq:candidateAcquisitions) {
-			if (Acq.priority == 0) {
-				candidateAcquisitionsP0.add(Acq);
-				acquWindowP0Sorted.addAll(Acq.acquisitionWindows) ;
+		for (CandidateAcquisition acq:candidateAcquisitions) {
+			for (AcquisitionWindow aw:acq.acquisitionWindows) {
+				double cur_time = aw.earliestStart;
+				while (cur_time<aw.latestStart){
+					taskSorted.add(new Task(aw, cur_time));
+					cur_time += 10*aw.duration;
+				}
 			}
-			else {
-				candidateAcquisitionsP1.add(Acq);
-				acquWindowP1Sorted.addAll(Acq.acquisitionWindows) ;
-			}
+		}		
 
-		}
+		Collections.sort(taskSorted,theComparator);
 
-
-		Collections.sort(acquWindowP0Sorted,startTimeComparator);
-		Collections.sort(acquWindowP1Sorted,startTimeComparator);
-		// System.out.println("Windows P0 : "+acquWindowP0Sorted.size()+"; Windows P1 : "+acquWindowP1Sorted.size());
-		acquWindowSorted.addAll(acquWindowP0Sorted);
-		acquWindowSorted.addAll(acquWindowP1Sorted);
-		Collections.sort(acquWindowSorted,startTimeComparator);
-
-		Map<Satellite,List<AcquisitionWindow>> concerned = new HashMap<Satellite,List<AcquisitionWindow>>();
-		Map<Satellite,Map<AcquisitionWindow,Double>> tabOptim = new HashMap<Satellite,Map<AcquisitionWindow,Double>>();
-		Map<Satellite,Map<AcquisitionWindow,AcquisitionWindow>> previous = new HashMap<Satellite,Map<AcquisitionWindow,AcquisitionWindow>>();
-		Map<Satellite,Map<AcquisitionWindow,Double>> bestEndTime = new HashMap<Satellite,Map<AcquisitionWindow,Double>>();
+		Map<Satellite,List<Task>> concerned = new HashMap<Satellite,List<Task>>();
+		Map<Satellite,Map<Task,Double>> tabOptim = new HashMap<Satellite,Map<Task,Double>>();
+		Map<Satellite,Map<Task,Task>> previous = new HashMap<Satellite,Map<Task,Task>>();
+		Map<Satellite,Map<Task,Double>> bestEndTime = new HashMap<Satellite,Map<Task,Double>>();
 
 		for (Satellite sat : planningProblem.satellites) {
-			concerned.put(sat,new ArrayList<AcquisitionWindow>());
-			tabOptim.put(sat, new HashMap<AcquisitionWindow,Double>());
-			previous.put(sat, new HashMap<AcquisitionWindow,AcquisitionWindow>());
-			bestEndTime.put(sat, new HashMap<AcquisitionWindow,Double>());
+			concerned.put(sat,new ArrayList<Task>());
+			tabOptim.put(sat, new HashMap<Task,Double>());
+			previous.put(sat, new HashMap<Task,Task>());
+			bestEndTime.put(sat, new HashMap<Task,Double>());
 		}
 
-		while(!acquWindowSorted.isEmpty()){
+		while(!taskSorted.isEmpty()){
 			// We select the earliest acquisitionWindow and do related computations
-			AcquisitionWindow acqWindow = acquWindowSorted.remove(0);
+			Task task = taskSorted.remove(0);
+			AcquisitionWindow acqWindow = task.acqWindow;
 			Satellite sat = acqWindow.satellite;
 
-			List<AcquisitionWindow> listAcq = concerned.get(sat);
-			Map<AcquisitionWindow,Double> tabOptimHere = tabOptim.get(sat);
-			Map<AcquisitionWindow,AcquisitionWindow> previousMap = previous.get(sat);
-			Map<AcquisitionWindow,Double> bestEndTimeMap = bestEndTime.get(sat);
+			List<Task> listTask = concerned.get(sat);
+			Map<Task,Double> tabOptimHere = tabOptim.get(sat);
+			Map<Task,Task> previousMap = previous.get(sat);
+			Map<Task,Double> bestEndTimeMap = bestEndTime.get(sat);
 
 			double bestCompatible = 0;
 			double bestCompatibleStartTime = acqWindow.earliestStart;
-			AcquisitionWindow bestAcqFound = acqWindow;	/* Not to be used without update */
+			Task bestTaskFound = task;	/* Not to be used without update */
 
 			/* Find the best previous acquisition */
-			for(AcquisitionWindow prevAcq : listAcq){
-				double prevAcqEndTime = bestEndTimeMap.get(prevAcq);
-				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevAcq, acqWindow);
+			for(Task prevTask : listTask){
+				double prevAcqEndTime = bestEndTimeMap.get(prevTask);
+				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevTask.acqWindow, acqWindow);
 				double startTime = Math.max(prevAcqEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
 
-				if (tabOptimHere.get(prevAcq) > bestCompatible){
+				if (tabOptimHere.get(prevTask) > bestCompatible){
 					if (startTime < acqWindow.latestStart) {
-						bestAcqFound = prevAcq;
-						bestCompatible = tabOptimHere.get(prevAcq);
+						bestTaskFound = prevTask;
+						bestCompatible = tabOptimHere.get(prevTask);
 						bestCompatibleStartTime = startTime;
 					}
-				else if(tabOptimHere.get(prevAcq) == bestCompatible){
+				else if(tabOptimHere.get(prevTask) == bestCompatible){
 					if (startTime < bestCompatibleStartTime) {
-						bestAcqFound = prevAcq;
+						bestTaskFound = prevTask;
 						bestCompatibleStartTime = startTime;
 					}
 				}
 				}
 			}
 			/* Update the fields of the map concerning the current acquisition window */
-			listAcq.add(acqWindow);
-			/* 1000000*(1-acqWindow.candidateAcquisition.priority)+(1-acqWindow.cloudProba) */
+			listTask.add(task);
+			/* 10000*(1-task.acqWindow.candidateAcquisition.priority)+(1-task.acqWindow.cloudProba) */
+
 			if (bestCompatible == 0) {
-				tabOptimHere.put(acqWindow,bestCompatible+1000000*(1-acqWindow.candidateAcquisition.priority)+(1-acqWindow.cloudProba)); /*Poids de l'acquisition*/
-				bestEndTimeMap.put(acqWindow,bestCompatibleStartTime+acqWindow.duration);
+				task.score=1;
+				tabOptimHere.put(task,task.score); /*Poids de l'acquisition*/
+				bestEndTimeMap.put(task,bestCompatibleStartTime+task.acqWindow.duration);
 			}
 			else{
-				tabOptimHere.put(acqWindow,bestCompatible+1000000*(1-acqWindow.candidateAcquisition.priority)+(1-acqWindow.cloudProba)); /*Poids de l'acquisition*/
-				bestEndTimeMap.put(acqWindow,bestCompatibleStartTime+acqWindow.duration);
-				previousMap.put(acqWindow,bestAcqFound);
+				if (bestTaskFound.acqWindow != acqWindow) {
+					task.score = 1;
+				}
+				tabOptimHere.put(task,bestCompatible+task.score); /*Poids de l'acquisition*/
+				bestEndTimeMap.put(task,bestCompatibleStartTime+task.acqWindow.duration);
+				previousMap.put(task,bestTaskFound);
 			}
 		}
 
 		/* Making the real planification */
 		for (Satellite sat : planningProblem.satellites) {
 			SatellitePlan satellitePlan = satellitePlans.get(sat);
-			List<AcquisitionWindow> listAcq = concerned.get(sat);
-			Map<AcquisitionWindow,Double> tabOptimHere = tabOptim.get(sat);
-			Map<AcquisitionWindow,AcquisitionWindow> previousMap = previous.get(sat);
+			List<Task> listTask = concerned.get(sat);
+			Map<Task,Double> tabOptimHere = tabOptim.get(sat);
+			Map<Task,Task> previousMap = previous.get(sat);
 
 			/* Find max in tabOptimHere */
 			double bestResult = 0;
-			AcquisitionWindow acqOpti = listAcq.get(0); /* Not to be used without modification */
-			for (AcquisitionWindow acqWindow : listAcq) {
-				if (tabOptimHere.get(acqWindow) > bestResult){
-					bestResult = tabOptimHere.get(acqWindow);
-					acqOpti = acqWindow ;
+			Task taskOpti = listTask.get(0); /* Not to be used without modification */
+			for (Task task : listTask) {
+				if (tabOptimHere.get(task) > bestResult){
+					bestResult = tabOptimHere.get(task);
+					taskOpti = task ;
 				}
 			}
 			System.out.println("bestResult = "+bestResult);
 
-			System.out.println("Result of first"+tabOptimHere.get(acqOpti));
+			System.out.println("Result of first "+tabOptimHere.get(taskOpti));
 
-			/* Get up in previous to find the corresponding acqwindows and update the plan */
-			while (bestResult>0){
-				bestResult=bestResult-(1000000*(1-acqOpti.candidateAcquisition.priority)+(1-acqOpti.cloudProba));
-				if (acqOpti.candidateAcquisition.selectedAcquisitionWindow==null) {
-					satellitePlan.add(acqOpti);
-					acqOpti.candidateAcquisition.selectedAcquisitionWindow=acqOpti;
+			/* Get up in previous to find the corresponding tasks and update the plan */
+			while (bestResult>0.01){
+				bestResult=bestResult-taskOpti.score;
+				if (taskOpti.acqWindow.candidateAcquisition.selectedAcquisitionWindow==null) {
+					satellitePlan.add(taskOpti.acqWindow);
+					taskOpti.acqWindow.candidateAcquisition.selectedAcquisitionWindow=taskOpti.acqWindow;
 					nPlanned++;
 				}
-				acqOpti = previousMap.get(acqOpti);
+				taskOpti = previousMap.get(taskOpti);
 			}
-			System.out.println("Result of last "+tabOptimHere.get(acqOpti));
+			System.out.println("Result of last "+tabOptimHere.get(taskOpti));
 			boolean feasible = satellitePlan.isFeasible();
 			System.out.println(sat.name+" feasibility "+feasible);
 		}
-
 
 		System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
@@ -190,7 +201,7 @@ public class AcquisitionPlannerGreedy {
 	private class SatellitePlan {
 
 		/** Acquisitions to be realized by the satellite */
-		private List<AcquisitionWindow> acqWindows;
+		private List<AcquisitionWindow> AcquisitionWindows;
 		/** Map defining the start time of each acquisition in the solution schedule */
 		private Map<AcquisitionWindow,Double> startTimes;
 		/** Map defining the end time of each acquisition in the solution schedule */
@@ -198,7 +209,7 @@ public class AcquisitionPlannerGreedy {
 
 
 		public SatellitePlan(){
-			acqWindows = new ArrayList<AcquisitionWindow>();
+			AcquisitionWindows = new ArrayList<AcquisitionWindow>();
 			startTimes = new HashMap<AcquisitionWindow,Double>();
 			endTimes = new HashMap<AcquisitionWindow,Double>();
 		}
@@ -206,22 +217,27 @@ public class AcquisitionPlannerGreedy {
 		public double getStart(AcquisitionWindow aw){
 			return startTimes.get(aw);
 		}
-
+		private final Comparator<AcquisitionWindow> cloudComparator = new Comparator<AcquisitionWindow>(){
+			@Override
+			public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
+				return Double.compare(w0.cloudProba, w1.cloudProba);
+			}		
+		};
 		public double getEnd(AcquisitionWindow aw){
 			return endTimes.get(aw);
 
 		}
 
-		public List<AcquisitionWindow> getAcqWindows(){
-			return acqWindows;
+		public List<AcquisitionWindow> getAcquisitionWindows(){
+			return AcquisitionWindows;
 		}
 
 		public void add(AcquisitionWindow aw){
-			acqWindows.add(aw);
+			AcquisitionWindows.add(aw);
 		}
 
 		public void remove(AcquisitionWindow aw){
-			acqWindows.remove(aw);
+			AcquisitionWindows.remove(aw);
 			startTimes.remove(aw);
 		}
 
@@ -232,26 +248,27 @@ public class AcquisitionPlannerGreedy {
 		public boolean isFeasible(){
 
 			// sort acquisition windows by increasing start times
-			Collections.sort(acqWindows,startTimeComparator);
-
+			//Collections.sort(AcquisitionWindows,startTimeComparator);
+			Collections.reverse(AcquisitionWindows);
 			// initialize the forward traversal of the acquisition windows by considering the first one 
-			AcquisitionWindow prevAcqWindow = acqWindows.get(0);
-			if(planningProblem.horizonStart > prevAcqWindow.latestStart)
-				return false;		
-			double startTime = Math.max(planningProblem.horizonStart,prevAcqWindow.earliestStart);
-			startTimes.put(prevAcqWindow,startTime);
-			double prevEndTime = startTime + prevAcqWindow.duration;
+			AcquisitionWindow prevAcq = AcquisitionWindows.get(0);
+			if(planningProblem.horizonStart > prevAcq.latestStart) {
+				return false;
+			}
+			double startTime = Math.max(planningProblem.horizonStart,prevAcq.earliestStart);
+			startTimes.put(prevAcq,startTime);
+			double prevEndTime = startTime + prevAcq.duration;
 
 			// traverse all acquisition windows and check that each acquisition can be realized (taking into account roll angle transitions) 
-			for(int i=1;i<acqWindows.size();i++){
-				AcquisitionWindow acqWindow = acqWindows.get(i);
-				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevAcqWindow, acqWindow);
-				startTime = Math.max(prevEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
-				if(startTime > acqWindow.latestStart) // sequence of acquisition windows not feasible
+			for(int i=1;i<AcquisitionWindows.size();i++){
+				AcquisitionWindow aw = AcquisitionWindows.get(i);
+				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevAcq, aw);
+				startTime = Math.max(prevEndTime+rollAngleTransitionTime,aw.earliestStart);
+				if(startTime > aw.latestStart) // sequence of acquisition windows not feasible
 					return false;
-				startTimes.put(acqWindow,startTime);
-				prevEndTime = startTime + acqWindow.duration;
-				prevAcqWindow = acqWindow;
+				startTimes.put(aw,startTime);
+				prevEndTime = startTime + aw.duration;
+				prevAcq = aw;
 			}		
 			return true;
 		}
@@ -261,7 +278,7 @@ public class AcquisitionPlannerGreedy {
 	private final Comparator<AcquisitionWindow> startTimeComparator = new Comparator<AcquisitionWindow>(){
 		@Override
 		public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
-			return Double.compare(w0.earliestStart+w0.latestStart, w1.earliestStart+w1.latestStart);
+			return Double.compare(w0.earliestStart, w1.earliestStart);
 		}		
 	};
 
@@ -281,7 +298,7 @@ public class AcquisitionPlannerGreedy {
 	public void writePlan(Satellite satellite, String solutionFilename) throws IOException{
 		PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(solutionFilename, false)));
 		SatellitePlan plan = satellitePlans.get(satellite);
-		for(AcquisitionWindow aw : plan.getAcqWindows()){
+		for(AcquisitionWindow aw : plan.getAcquisitionWindows()){
 			double start = plan.getStart(aw);
 			writer.write(aw.candidateAcquisition.idx + " " + aw.idx + " " + start + " " + (start+aw.duration) + 
 					 " " + aw.candidateAcquisition.name + "\n");
