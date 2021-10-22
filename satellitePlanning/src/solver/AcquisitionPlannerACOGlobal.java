@@ -36,7 +36,7 @@ import java.util.stream.IntStream;
  * @author cpralet
  *
  */
-public class AcquisitionPlannerACO {
+public class AcquisitionPlannerACOGlobal {
 
 	/** Planning problem for which this acquisition planner is used */
 	private final PlanningProblem planningProblem;
@@ -54,7 +54,7 @@ public class AcquisitionPlannerACO {
 	 * Build an acquisition planner for a planning problem
 	 * @param planningProblem
 	 */
-	public AcquisitionPlannerACO(PlanningProblem planningProblem, int searchDepth){
+	public AcquisitionPlannerACOGlobal(PlanningProblem planningProblem, int searchDepth){
 		this.planningProblem = planningProblem;
 		this.searchDepth = searchDepth;
 		satellitePlans = new HashMap<Satellite,SatellitePlan>();
@@ -139,7 +139,7 @@ public class AcquisitionPlannerACO {
 		
 		while(!acqWindowP0Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
-			AcquisitionSelectorContainer selectorContainer = selectNextWindow(acqWindowP0Sorted, searchDepth);
+			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP0Selected,acqWindowP0Sorted, searchDepth);
 			acqWindowP0Sorted = selectorContainer.acquisitionList;
 			AcquisitionWindow acqWindow = selectorContainer.acquisition;
 			if (Objects.nonNull(acqWindow)){
@@ -150,7 +150,7 @@ public class AcquisitionPlannerACO {
 		}
 		while(!acqWindowP1Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
-			AcquisitionSelectorContainer selectorContainer = selectNextWindow(acqWindowP1Sorted, searchDepth);
+			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP1Selected,acqWindowP1Sorted, searchDepth);
 			acqWindowP1Sorted = selectorContainer.acquisitionList;
 			AcquisitionWindow acqWindow = selectorContainer.acquisition;
 			// System.out.println("nRemainingCandidatesP1: " + acqWindowP1Sorted.size());
@@ -163,51 +163,43 @@ public class AcquisitionPlannerACO {
 		// System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
 
-	private AcquisitionSelectorContainer selectNextWindow(List<AcquisitionWindow> acqWindowsSorted, int searchDepth) {
-		// First potential acquitisition window - necessarily compatible per construction
-		AcquisitionWindow acqWindowCandidate = acqWindowsSorted.remove(0);
-		CandidateAcquisition acqCandidate = acqWindowCandidate.candidateAcquisition;
-		// Test add to the plan
-		Satellite satelliteCandidate = acqWindowCandidate.satellite;
-		SatellitePlan satellitePlan = satellitePlans.get(satelliteCandidate);
-		satellitePlan.add(acqWindowCandidate);
-		double startTime = Math.max(planningProblem.horizonStart,acqWindowCandidate.earliestStart);
-		satellitePlan.addTimes(acqWindowCandidate, startTime);
+	private AcquisitionSelectorContainer selectRandom(List<Acquisition> acqSelected, List<AcquisitionWindow> acqWindowSorted, int searchDepth) {
+		int maxLength = Math.min(searchDepth, acqWindowSorted.size());
+		List<AcquisitionWindow> acqWindowFirsts = new ArrayList<>(acqWindowSorted.subList(0, maxLength));
+		List<AcquisitionWindow> acqWindowFirstsValid = new ArrayList<AcquisitionWindow>();
 
-		// List of conccurent acquisitions windows
-		List<AcquisitionWindow> acqWindowsConccurent = new ArrayList<AcquisitionWindow>();
-		acqWindowsConccurent.add(acqWindowCandidate);
-
-		for (AcquisitionWindow acqWindowConcurrent:acqWindowsSorted){
-			CandidateAcquisition acqConccurent = acqWindowConcurrent.candidateAcquisition;
-			Satellite satelliteConcurrent = acqWindowConcurrent.satellite;
-			satellitePlan = satellitePlans.get(satelliteConcurrent);
-			
-			// In case of conflict add to the list
-			if (Objects.equals(acqConccurent, acqCandidate) || !satellitePlan.isFeasible(acqWindowConcurrent)){
-				acqWindowsConccurent.add(acqWindowConcurrent);
+		for (AcquisitionWindow acqWindow : acqWindowFirsts) {
+			CandidateAcquisition acq = acqWindow.candidateAcquisition;
+			Satellite satellite = acqWindow.satellite;
+			SatellitePlan satellitePlan = satellitePlans.get(satellite);
+	
+			// Check that the acquisition window is not already realized and feasible
+			if (!acqSelected.contains(acq) && satellitePlan.isFeasible(acqWindow)){
+				acqWindowFirstsValid.add(acqWindow);
+				// System.out.println("Potential acq weigtht " + weight + " ts=" + acqWindow.earliestStart);
+			}
+			else{
+				acqWindowSorted.remove(acqWindow);
 			}
 		}
-
-		satellitePlan.remove(acqWindowCandidate); // Remove window
 		
 		// no valid acquisition window
-		if (acqWindowsConccurent.isEmpty()) { 
-			return new AcquisitionSelectorContainer(acqWindowsSorted, null);
+		if (acqWindowFirstsValid.isEmpty()) { 
+			return new AcquisitionSelectorContainer(acqWindowSorted, null);
 		}
 		
 		// Select a random acquisition based on the computed weigths and add it to the corresponding satellitePlan
 		Random rand = new Random(System.nanoTime());
-		AcquisitionWindow acqWindow = selectWeightedAcquisitionWindow(rand, acqWindowsConccurent, pheronomes);
+		AcquisitionWindow acqWindow = selectWeightedAcquisitionWindow(rand, acqWindowFirstsValid, pheronomes);
 		Satellite satellite = acqWindow.satellite;
-		satellitePlan = satellitePlans.get(satellite);
+		SatellitePlan satellitePlan = satellitePlans.get(satellite);
 		// CandidateAcquisition acq = acqWindow.candidateAcquisition;
 		// acq.selectedAcquisitionWindow = acqWindow;
 		// acqSelected.add(acq);
 		satellitePlan.add(acqWindow);
-		acqWindowsSorted.remove(acqWindow);
+		acqWindowSorted.remove(acqWindow);
 
-		return new AcquisitionSelectorContainer(acqWindowsSorted, acqWindow);
+		return new AcquisitionSelectorContainer(acqWindowSorted, acqWindow);
 	}
 
 
@@ -288,7 +280,6 @@ public class AcquisitionPlannerACO {
 		public void remove(AcquisitionWindow aw){
 			acqWindows.remove(aw);
 			startTimes.remove(aw);
-			endTimes.remove(aw);
 		}
 
 		public void addTimes(AcquisitionWindow aw, double startTime){
@@ -309,31 +300,49 @@ public class AcquisitionPlannerACO {
 		 * 
 		 * @return true if the list of acquisition windows is evaluated as being feasible from a temporal point of view
 		 */
-		public boolean isFeasible(AcquisitionWindow aw){
+		public boolean isFeasible(AcquisitionWindow acqWindow){
 
 			// sort acquisition windows by increasing start times
-			// Collections.sort(acqWindows,chosenStartTimeComparator);
+			Collections.sort(acqWindows,chosenStartTimeComparator);
 			// sortByValues();
 
 			// First acquisition to be added
 			if (acqWindows.isEmpty()){
-				double startTime = Math.max(planningProblem.horizonStart,aw.earliestStart);
-				addTimes(aw, startTime);
+				double startTime = Math.max(planningProblem.horizonStart,acqWindow.earliestStart);
+				double endTime = startTime + acqWindow.duration;
+				startTimes.put(acqWindow, startTime);
+				endTimes.put(acqWindow, endTime);
 				return true;
-
 			}else{
-				// Else try to insert it at the end
+				// Else try to insert it between existing acqWindows
 
-				AcquisitionWindow awPrev = acqWindows.get(acqWindows.size()-1);
-				double rollAngleTransitionTimePrev = planningProblem.getTransitionTime(awPrev, aw);
-				double startCandidate = endTimes.get(awPrev) + rollAngleTransitionTimePrev;
-				if (aw.latestStart > startCandidate) {
-					// Add to the end
-					double startTime = Math.max(startCandidate, aw.earliestStart);
-					addTimes(aw, startTime);
-					return true;
+				for (int i=0;i<acqWindows.size();i++){
+					AcquisitionWindow acqWindowPrev = acqWindows.get(i);
+					double rollAngleTransitionTimePrev = planningProblem.getTransitionTime(acqWindowPrev, acqWindow);
+					double startCandidate = endTimes.get(acqWindowPrev) + rollAngleTransitionTimePrev;
+					if (i < acqWindows.size()-1){
+
+						AcquisitionWindow acqWindowNext = acqWindows.get(i+1);
+						double rollAngleTransitionTimeNext = planningProblem.getTransitionTime(acqWindowNext, acqWindow);
+						double nextWindowStart = startTimes.get(acqWindowNext);
+						double startTime = Math.max(startCandidate, acqWindow.earliestStart);
+						double endCandidate = startTime + acqWindow.duration + rollAngleTransitionTimeNext;
+						if ((acqWindow.latestStart > startCandidate) && (endCandidate < nextWindowStart)) {
+							// Feasible
+							addTimes(acqWindow, startTime);
+							return true;
+						}
+					}
+					else{
+						if (acqWindow.latestStart > startCandidate) {
+							// Add to the end
+							double startTime = Math.max(startCandidate, acqWindow.earliestStart);
+							addTimes(acqWindow, startTime);
+							return true;
+						}
+					}
+
 				}
-
 				return false;
 			}
 		}
@@ -442,7 +451,7 @@ public class AcquisitionPlannerACO {
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
-		AcquisitionPlannerACO planner = new AcquisitionPlannerACO(pb, searchDepth);
+		AcquisitionPlannerACOGlobal planner = new AcquisitionPlannerACOGlobal(pb, searchDepth);
 
 		// Reference fitness
 		double referenceFitness = planner.computeReferenceFitness();
