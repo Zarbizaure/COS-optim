@@ -445,7 +445,7 @@ public class AcquisitionPlannerACOGlobal {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
-		int nRuns = 1000;
+		int nRuns = 10;
 		int searchDepth = 20;
 
 		ProblemParserXML parser = new ProblemParserXML(); 
@@ -470,7 +470,7 @@ public class AcquisitionPlannerACOGlobal {
 			double val0 = planner.pheronomes.get(pb.acquisitionWindows.get(367));
 			double val1 = planner.pheronomes.get(pb.acquisitionWindows.get(423));
 
-			// System.out.println("Generation " + (i+1) + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + String.format("% .2f", fitness) + " | Value0 " + String.format("% .2f", val0) + " | Value1 " + String.format("% .2f", val1));
+			System.out.println("Generation " + (i+1) + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + String.format("% .2f", fitness) + " | Value0 " + String.format("% .2f", val0) + " | Value1 " + String.format("% .2f", val1));
 
 			planner.updatePheromones(fitness / 30);
 			planner.decayPheromones(0.3);
