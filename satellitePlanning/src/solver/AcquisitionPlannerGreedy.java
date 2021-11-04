@@ -85,7 +85,7 @@ public class AcquisitionPlannerGreedy {
 				double cur_time = aw.earliestStart;
 				while (cur_time<aw.latestStart){
 					taskSorted.add(new Task(aw, cur_time));
-					cur_time += 10*aw.duration;
+					cur_time += 100*aw.duration;
 				}
 			}
 		}		
@@ -121,22 +121,26 @@ public class AcquisitionPlannerGreedy {
 
 			/* Find the best previous acquisition */
 			for(Task prevTask : listTask){
-				double prevAcqEndTime = bestEndTimeMap.get(prevTask);
-				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevTask.acqWindow, acqWindow);
-				double startTime = Math.max(prevAcqEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
+				if (prevTask.acqWindow != acqWindow) {
+					if (tabOptimHere.get(prevTask) > 0|| previousMap.get(prevTask).acqWindow != acqWindow) {
+						double prevAcqEndTime = bestEndTimeMap.get(prevTask);
+						double rollAngleTransitionTime = planningProblem.getTransitionTime(prevTask.acqWindow, acqWindow);
+						double startTime = Math.max(prevAcqEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
 
-				if (tabOptimHere.get(prevTask) > bestCompatible){
-					if (startTime < acqWindow.latestStart) {
-						bestTaskFound = prevTask;
-						bestCompatible = tabOptimHere.get(prevTask);
-						bestCompatibleStartTime = startTime;
+						if (tabOptimHere.get(prevTask) > bestCompatible){
+							if (startTime < acqWindow.latestStart) {
+								bestTaskFound = prevTask;
+								bestCompatible = tabOptimHere.get(prevTask);
+								bestCompatibleStartTime = startTime;
+							}
+						else if(tabOptimHere.get(prevTask) == bestCompatible){
+							if (startTime < bestCompatibleStartTime) {
+								bestTaskFound = prevTask;
+								bestCompatibleStartTime = startTime;
+							}
+						}
+						}
 					}
-				else if(tabOptimHere.get(prevTask) == bestCompatible){
-					if (startTime < bestCompatibleStartTime) {
-						bestTaskFound = prevTask;
-						bestCompatibleStartTime = startTime;
-					}
-				}
 				}
 			}
 			/* Update the fields of the map concerning the current acquisition window */
@@ -144,13 +148,13 @@ public class AcquisitionPlannerGreedy {
 			/* 10000*(1-task.acqWindow.candidateAcquisition.priority)+(1-task.acqWindow.cloudProba) */
 
 			if (bestCompatible == 0) {
-				task.score=1;
+				task.score=10000*(1-task.acqWindow.candidateAcquisition.priority)+(1-task.acqWindow.cloudProba);
 				tabOptimHere.put(task,task.score); /*Poids de l'acquisition*/
 				bestEndTimeMap.put(task,bestCompatibleStartTime+task.acqWindow.duration);
 			}
 			else{
 				if (bestTaskFound.acqWindow != acqWindow) {
-					task.score = 1;
+					task.score = 10000*(1-task.acqWindow.candidateAcquisition.priority)+(1-task.acqWindow.cloudProba);
 				}
 				tabOptimHere.put(task,bestCompatible+task.score); /*Poids de l'acquisition*/
 				bestEndTimeMap.put(task,bestCompatibleStartTime+task.acqWindow.duration);
