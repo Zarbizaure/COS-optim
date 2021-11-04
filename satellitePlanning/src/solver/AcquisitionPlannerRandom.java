@@ -4,14 +4,12 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.text.FieldPosition;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 
 import javax.xml.stream.FactoryConfigurationError;
@@ -38,8 +36,8 @@ public class AcquisitionPlannerRandom {
 	private final PlanningProblem planningProblem;
 	/** Data structure used for storing the plan of each satellite */
 	private final Map<Satellite,SatellitePlan> satellitePlans;
-
-	private int searchDepth = 10;
+	/** Store selected AcquisitionWindow List */
+	public List<AcquisitionWindow> selectedWindows;
 
 	
 	/**
@@ -52,6 +50,16 @@ public class AcquisitionPlannerRandom {
 		for(Satellite satellite : planningProblem.satellites){
 			satellitePlans.put(satellite, new SatellitePlan());
 		}
+		selectedWindows = new ArrayList<AcquisitionWindow>();
+	}
+
+	/** Reset algorithm */
+	public void reset(){
+		for(Satellite satellite : planningProblem.satellites){
+			satellitePlans.put(satellite, new SatellitePlan());
+		}
+		selectedWindows = new ArrayList<AcquisitionWindow>();
+
 	}
 
 	/**
@@ -68,11 +76,6 @@ public class AcquisitionPlannerRandom {
 		List<AcquisitionWindow> acquWindowP0Sorted = new ArrayList<AcquisitionWindow>();
 		List<AcquisitionWindow> acquWindowP1Sorted = new ArrayList<AcquisitionWindow>();
 
-		List<Acquisition> acqP0Selected = new ArrayList<Acquisition>();
-		List<Acquisition> acqP1Selected = new ArrayList<Acquisition>();
-
-
-
 		for (CandidateAcquisition Acq:candidateAcquisitions) {
 			if (Acq.priority == 0) {
 				candidateAcquisitionsP0.add(Acq);
@@ -85,125 +88,51 @@ public class AcquisitionPlannerRandom {
 
 		}
 
-		Collections.sort(acquWindowP0Sorted,cloudComparator);
-		Collections.sort(acquWindowP1Sorted,cloudComparator);
+		Random rand = new Random(System.nanoTime());
+
+		Collections.shuffle(acquWindowP0Sorted, rand);
+		Collections.shuffle(acquWindowP1Sorted, rand);
 		
 		while(!acquWindowP0Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
-			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP0Selected,acquWindowP0Sorted, searchDepth);
-			acquWindowP0Sorted = selectorContainer.acquisitionList;
-			if (!acquWindowP0Sorted.isEmpty()) {
-				AcquisitionWindow acqWindow = selectorContainer.acquisition;
-				Acquisition acq = acqWindow.candidateAcquisition;
-				acqP0Selected.add(acq);
-				nPlanned = nPlanned + 1;
+			AcquisitionWindow acqWindow = acquWindowP0Sorted.remove(0);
+			// try to plan one acquisition window for this acquisition (and stop once a feasible acquisition window is found
+			Satellite satellite = acqWindow.satellite;
+			CandidateAcquisition acq = acqWindow.candidateAcquisition;
+			SatellitePlan satellitePlan = satellitePlans.get(satellite);
+			if (candidateAcquisitionsP0.contains(acq)) {
+				satellitePlan.add(acqWindow);
+				if(satellitePlan.isFeasible()){
+					nPlanned++;
+					acq.selectedAcquisitionWindow = acqWindow;
+					candidateAcquisitionsP0.remove(acq);
+					selectedWindows.add(acqWindow);
+				}
+				else
+					satellitePlan.remove(acqWindow);
 			}
 		}
 		while(!acquWindowP1Sorted.isEmpty()){
 			// We select the less cloud-disturbed acquisitionWindow and do related acquisitions
-			AcquisitionSelectorContainer selectorContainer = selectRandom(acqP1Selected,acquWindowP1Sorted, searchDepth);
-			acquWindowP1Sorted = selectorContainer.acquisitionList;
-			if (!acquWindowP1Sorted.isEmpty()) {
-				AcquisitionWindow acqWindow = selectorContainer.acquisition;
-				Acquisition acq = acqWindow.candidateAcquisition;
-				acqP1Selected.add(acq);
-				nPlanned = nPlanned + 1;
+			AcquisitionWindow acqWindow = acquWindowP1Sorted.remove(0);
+			// try to plan one acquisition window for this acquisition (and stop once a feasible acquisition window is found
+			Satellite satellite = acqWindow.satellite;
+			CandidateAcquisition acq = acqWindow.candidateAcquisition;
+			SatellitePlan satellitePlan = satellitePlans.get(satellite);
+			if (candidateAcquisitionsP1.contains(acq)) {
+				satellitePlan.add(acqWindow);
+				if(satellitePlan.isFeasible()){
+					nPlanned++;
+					acq.selectedAcquisitionWindow = acqWindow;
+					candidateAcquisitionsP1.remove(acq);
+					selectedWindows.add(acqWindow);
+				}
+				else
+					satellitePlan.remove(acqWindow);
 			}
 		}
-		System.out.println("nPlanned: " + nPlanned + "/" + nCandidates);
 	}
 
-
-	private AcquisitionSelectorContainer selectRandom(List<Acquisition> acqSelected, List<AcquisitionWindow> acquWindowSorted, int searchDepth) {
-		int maxLength = Math.min(searchDepth, acquWindowSorted.size());
-		List<AcquisitionWindow> candidateAcqList = new ArrayList<>(acquWindowSorted.subList(0, maxLength));
-
-		Map<AcquisitionWindow,Double> weightsMap = new HashMap<AcquisitionWindow,Double>();;
-
-		// Compute the weights
-		double weightsSum = 0.0;
-		for (AcquisitionWindow acqWindow : candidateAcqList) {
-			double weight = computeAcquisitionWeight(acqSelected, acqWindow);
-			// Remove unnecessary window from the list (negative weight)
-			if (weight < 0){
-				acquWindowSorted.remove(acqWindow);
-			}
-			else {
-				weightsMap.put(acqWindow, weight);
-				weightsSum += weight;
-			}
-		}
-		
-		// no valid acquisition window
-		// Return empty list & null acquisition window
-		if (weightsMap.isEmpty()) { 
-			return new AcquisitionSelectorContainer(new ArrayList<AcquisitionWindow>(), null);
-		}
-		
-		// Select a random acquisition based on the computed weigths and add it to the corresponding satellitePlan
-		Random rand = new Random(System.currentTimeMillis());
-		AcquisitionWindow acqWindow = selectWeightedAcquisitionWindow(rand, weightsMap, weightsSum);
-		Satellite satellite = acqWindow.satellite;
-		SatellitePlan satellitePlan = satellitePlans.get(satellite);
-		satellitePlan.add(acqWindow);
-		acquWindowSorted.remove(acqWindow);
-
-		return new AcquisitionSelectorContainer(acquWindowSorted, acqWindow);
-	}
-
-	public AcquisitionWindow selectWeightedAcquisitionWindow(Random rand, Map<AcquisitionWindow,Double> weightsMap, double weightsSum) {
-		double randomValue = rand.nextDouble()*weightsSum;
-        double currentSum = 0.0;
-		AcquisitionWindow selectedAcqWindow = null;
-		
-        for (AcquisitionWindow acqWindow : weightsMap.keySet()){
-            if (randomValue < currentSum + weightsMap.get(acqWindow)){
-                return acqWindow;
-            }
-            currentSum+= weightsMap.get(acqWindow);
-            selectedAcqWindow = acqWindow;
-        }
-        return selectedAcqWindow;
-	}
-
-
-	private double computeAcquisitionWeight(List<Acquisition> acqSelected, AcquisitionWindow acqWindow) {
-		Satellite satellite = acqWindow.satellite; 
-
-		CandidateAcquisition acq = acqWindow.candidateAcquisition;
-		SatellitePlan satellitePlan = satellitePlans.get(satellite);
-
-		// Check that the acquisition window is not already realized
-		if (acqSelected.contains(acq)) {
-			return -1.0;
-		}
-
-		// Check for validity for the corresponding satellite
-		satellitePlan.add(acqWindow);
-		if(satellitePlan.isFeasible()){
-			acq.selectedAcquisitionWindow = acqWindow;
-		}
-		else{
-			return -1.0;
-		}
-		satellitePlan.remove(acqWindow);
-
-		// Compute weigth - now cloud probability, cloud be more complex later
-		return 1-acqWindow.cloudProba;
-	}
-
-	public class AcquisitionSelectorContainer{
-
-		private List<AcquisitionWindow> acquisitionList;
-		private AcquisitionWindow acquisition;
-	  
-		public AcquisitionSelectorContainer(List<AcquisitionWindow> acquisitionList, AcquisitionWindow acquisition){
-			this.acquisitionList = acquisitionList;
-			this.acquisition = acquisition;
-		}
-	
-		// getters and setters
-	}
 
 	private class SatellitePlan {
 
@@ -275,6 +204,18 @@ public class AcquisitionPlannerRandom {
 		}
 	}
 
+	public Integer[] computeAmount(){
+		Integer[] cntByPriority = {0, 0};
+		int cntTotal = 0;
+		// Count
+		for (AcquisitionWindow aw : selectedWindows) {
+			Acquisition acq = aw.candidateAcquisition;
+			cntByPriority[acq.priority] ++;
+			cntTotal ++; 
+		}
+		return cntByPriority;
+	}
+
 	/** Comparator used for sorting acquisition windows by increasing earliest start time */
 	private final Comparator<AcquisitionWindow> startTimeComparator = new Comparator<AcquisitionWindow>(){
 		@Override
@@ -284,6 +225,13 @@ public class AcquisitionPlannerRandom {
 	};
 
 	private final Comparator<AcquisitionWindow> cloudComparator = new Comparator<AcquisitionWindow>(){
+		@Override
+		public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
+			return Double.compare(w0.cloudProba, w1.cloudProba);
+		}		
+	};
+
+	private final Comparator<AcquisitionWindow> randomComparator = new Comparator<AcquisitionWindow>(){
 		@Override
 		public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
 			return Double.compare(w0.cloudProba, w1.cloudProba);
@@ -310,14 +258,37 @@ public class AcquisitionPlannerRandom {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
+		int nRuns = 100;
+
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
 		AcquisitionPlannerRandom planner = new AcquisitionPlannerRandom(pb);
-		planner.planAcquisitions();	
-		for(Satellite satellite : pb.satellites){
-			planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
+		int cntMax = 0;
+		int idxMaxCnt = 0;
+
+		for (int i=0; i<nRuns; i++){
+			planner.reset();
+			planner.planAcquisitions();	
+			// Count
+			Integer[] count = planner.computeAmount();
+			int cntTotal = count[0] + count[1];
+
+			if (cntTotal > cntMax) {
+				cntMax = cntTotal;
+				idxMaxCnt = i;
+				// Save the plan
+				for(Satellite satellite : pb.satellites){
+					planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
+				}
+			}
+
+
+			System.out.println("Generation " + (i+1) + " | Tot " + (count[0] + count[1]) + " | P0 " + count[0] + " | P1 " + count[1]);
+
 		}
+
+		System.out.println("Max Cnt of " + cntMax + " at generation " + (idxMaxCnt+1));
 		System.out.println("Acquisition planning done");
 	}
 	

@@ -406,7 +406,9 @@ public class AcquisitionPlannerACO {
 	public List<AcquisitionWindow> selectBestWindows() { // select best window by coverage
 		List<AcquisitionWindow> awList = new ArrayList<AcquisitionWindow>();
 		for (CandidateAcquisition acquisition : planningProblem.candidateAcquisitions) {
-			awList.add(Collections.max(acquisition.acquisitionWindows, cloudComparator));
+			try{
+				awList.add(Collections.max(acquisition.acquisitionWindows, cloudComparator));
+			}catch(java.util.NoSuchElementException e){}
 		}
 		return awList;
 	}

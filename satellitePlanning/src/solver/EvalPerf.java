@@ -19,6 +19,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.TimeZone;
 
@@ -74,7 +75,11 @@ public class EvalPerf {
 
 		public void selectBestWindow() { // select best window by coverage
 			for (CandidateAcquisition acquisition : this.candAcqList) {
-				acquisition.selectedAcquisitionWindow = Collections.max(acquisition.acquisitionWindows, cloudProbaComparator);
+				try{
+					acquisition.selectedAcquisitionWindow = Collections.max(acquisition.acquisitionWindows, cloudProbaComparator);
+				}catch(java.util.NoSuchElementException e){
+					acquisition.selectedAcquisitionWindow = null;
+				}
 			}
 		}
 
@@ -95,8 +100,14 @@ public class EvalPerf {
 			// Count
 			for (CandidateAcquisition acquisition : this.candAcqList) {
 				this.cntByPriority[acquisition.priority] += 1;
- 				this.cntTotal += 1; 
-				this.cntByCoverage += (1-acquisition.selectedAcquisitionWindow.cloudProba);
+				this.cntTotal += 1; 
+				double cloudProba;
+				if(Objects.isNull(acquisition.selectedAcquisitionWindow)){
+					cloudProba=0.0;
+				}else{
+					cloudProba = acquisition.selectedAcquisitionWindow.cloudProba;
+				}
+				this.cntByCoverage += (1-cloudProba);
 			}
 		}
 
