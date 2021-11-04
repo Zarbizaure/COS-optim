@@ -78,6 +78,14 @@ public class EvalPerf {
 			}
 		}
 
+		/** Comparator used for sorting acquisition windows by increasing earliest start time */
+		private final Comparator<AcquisitionWindow> startTimeComparator = new Comparator<AcquisitionWindow>(){
+			@Override
+			public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
+				return Double.compare(w0.earliestStart, w1.earliestStart);
+			}		
+		};
+
 		public void count() {
 			// Reset count
 			cntByPriority[0] = 0;
@@ -103,7 +111,7 @@ public class EvalPerf {
 
 	public void evaluate() {
 		ResultsPerf resPlan = new ResultsPerf(plan.plannedAcquisitions);
-		ResultsPerf resCand= new ResultsPerf(plan.pb.candidateAcquisitions);
+		ResultsPerf resCand = new ResultsPerf(plan.pb.candidateAcquisitions);
 
 		// Select the best windows for the candidates
 		resCand.selectBestWindow();

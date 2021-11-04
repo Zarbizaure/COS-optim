@@ -370,8 +370,32 @@ public class AcquisitionPlannerACO {
 			}
 		}
 
+		public boolean isFeasible(){
 
+			// sort acquisition windows by increasing start times
+			Collections.sort(acqWindows,chosenStartTimeComparator);
 
+			// initialize the forward traversal of the acquisition windows by considering the first one 
+			AcquisitionWindow prevAcqWindow = acqWindows.get(0);
+			if(planningProblem.horizonStart > prevAcqWindow.latestStart)
+				return false;		
+			double startTime = Math.max(planningProblem.horizonStart,prevAcqWindow.earliestStart);
+			startTimes.put(prevAcqWindow,startTime);
+			double prevEndTime = startTime + prevAcqWindow.duration;
+
+			// traverse all acquisition windows and check that each acquisition can be realized (taking into account roll angle transitions) 
+			for(int i=1;i<acqWindows.size();i++){
+				AcquisitionWindow acqWindow = acqWindows.get(i);
+				double rollAngleTransitionTime = planningProblem.getTransitionTime(prevAcqWindow, acqWindow);
+				startTime = Math.max(prevEndTime+rollAngleTransitionTime,acqWindow.earliestStart);
+				if(startTime > acqWindow.latestStart) // sequence of acquisition windows not feasible
+					return false;
+				startTimes.put(acqWindow,startTime);
+				prevEndTime = startTime + acqWindow.duration;
+				prevAcqWindow = acqWindow;
+			}		
+			return true;
+		}
 	}
 
 	public double computeReferenceFitness(){
@@ -460,7 +484,7 @@ public class AcquisitionPlannerACO {
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
 		/* Parameters **/
-		int nRuns = 1000;
+		int nRuns = 10;
 		double progressionRewardExp = 50; // reward exponent when the fitness increases
 		double regressionRewardExp = 45; // penalty exponent when the fitness decreases
 		double progressionRewardMult = 200; // reward mult when the fitness increases
@@ -489,6 +513,7 @@ public class AcquisitionPlannerACO {
 		double[] prio1Array = new double[nRuns];
 		double[] totalArray = new double[nRuns];
 
+		/** MAIN LOOP */ 
 		for (int i=0; i<nRuns; i++){
 			planner.reset();
 			planner.planAcquisitions();	
@@ -510,7 +535,6 @@ public class AcquisitionPlannerACO {
 				minFitness = fitness;
 			}
 
-			// double updateScore = Math.max((fitness-previousFitness)*progressionRewardMult, fitness*baseRewardMult);
 			if (i>0) {
 				// double relativeFitness = fitness/previousFitness;
 				double diffFitness = fitness - previousFitness;
@@ -537,15 +561,18 @@ public class AcquisitionPlannerACO {
 			totalArray[i] += count[0] + count[1];
 
 			previousFitness = fitness;
-
-	/* 		int cnt = 0;
-			for (AcquisitionWindow aw:pb.acquisitionWindows){
-				String val2 = String.format("% .2f", planner.pheronomes.get(aw));
-				System.out.println(cnt + " pheromone" + val2);
-				cnt ++;
-			} */
 		}
+		/** END MAIN LOOP */ 
 
+		/** CHECK FEASABILITY */
+		for (Satellite satellite : planner.planningProblem.satellites){
+			SatellitePlan plan = planner.satellitePlans.get(satellite);
+			boolean planFeasible = plan.isFeasible();
+			if (planFeasible==false){
+				System.out.println("ERROR ! Plan not feasible");
+			}
+		}
+		
 		System.out.println("Max Fitness of " + String.format("% .2f", maxFitness) + " at generation " + idxMaxFitness);
 
 		double minY = minFitness - (maxFitness - minFitness) * 0.1;
@@ -556,7 +583,7 @@ public class AcquisitionPlannerACO {
 			xAxis("Run", Plot.axisOpts().
 				range(0, nRuns)).
 			yAxis("Fitness", Plot.axisOpts().
-				range(minY, maxY)).
+				range(minY, maxY)). 
 			series("Fitness", Plot.data().
 				xy(iterationArray, fitnessArray),
 			Plot.seriesOpts().

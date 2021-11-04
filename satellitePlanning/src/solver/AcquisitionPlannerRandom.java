@@ -222,14 +222,7 @@ public class AcquisitionPlannerRandom {
 		}
 
 		public double getStart(AcquisitionWindow aw){
-			AcquisitionWindow aw1 = aw;
-			try{
-				return startTimes.get(aw);
-			} catch(Exception javaException){
-				System.out.println("Fail");
-				return 0;
-			}
-				
+			return startTimes.get(aw);
 		}
 
 		public double getEnd(AcquisitionWindow aw){
