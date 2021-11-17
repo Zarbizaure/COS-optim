@@ -174,18 +174,20 @@ public class AcquisitionPlannerACO {
 	}
 
 	private List<AcquisitionWindow> getConccurentWindows(List<AcquisitionWindow> acqWindows, AcquisitionWindow aw){
+
 		List<AcquisitionWindow> acqWindowsConccurent = new ArrayList<AcquisitionWindow>();
 
-		for (AcquisitionWindow acqWindowConcurrent:acqWindows){
+		for (AcquisitionWindow awConc:acqWindows){
 			// Not already unavailable
-			if (availableWindows.get(acqWindowConcurrent)) {
-				CandidateAcquisition acqConccurent = acqWindowConcurrent.candidateAcquisition;
-				Satellite satelliteConcurrent = acqWindowConcurrent.satellite;
+			if (availableWindows.get(awConc)) {
+				CandidateAcquisition acqConccurent = awConc.candidateAcquisition;
+				Satellite satelliteConcurrent = awConc.satellite;
 				SatellitePlan satellitePlan = satellitePlans.get(satelliteConcurrent);
 				
 				// In case of conflict add to the list
-				if ((acqConccurent == aw.candidateAcquisition) || (satellitePlan.findStartTime(acqWindowConcurrent) < 0.0)) {
-					acqWindowsConccurent.add(acqWindowConcurrent);
+				
+				if ((acqConccurent == aw.candidateAcquisition) || (satellitePlan.findStartTime(awConc) < 0.0)) {
+					acqWindowsConccurent.add(awConc);
 				} 
 			}
 		}
@@ -330,23 +332,36 @@ public class AcquisitionPlannerACO {
 		public double findStartTime(AcquisitionWindow acqWindow){
 
 			// sort acquisition windows by increasing start times
+			startTimes.put(acqWindow, acqWindow.earliestStart);
+			acqWindows.add(acqWindow);
 			Collections.sort(acqWindows,chosenStartTimeComparator);
-			// sortByValues();
+			int i_start = Math.max(Collections.binarySearch(acqWindows, acqWindow, chosenStartTimeComparator),1)-1;
+			acqWindows.remove(acqWindow);
+													// sortByValues();
 
 			// First acquisition to be added
 			if (acqWindows.isEmpty()){
 				double startTime = Math.max(planningProblem.horizonStart,acqWindow.earliestStart);
 				return startTime;
 			}else{
+				// System.out.println("Index " + i_start + " earliestStart " + acqWindow.earliestStart + " firstStartTime " + startTimes.get(acqWindows.get(i_start)));
+
 				// Else try to insert it between existing acqWindows
 
-				for (int i=0;i<acqWindows.size();i++){
+				for (int i=i_start;i<acqWindows.size();i++){
 					AcquisitionWindow acqWindowPrev = acqWindows.get(i);
 					double rollAngleTransitionTimePrev = planningProblem.getTransitionTime(acqWindowPrev, acqWindow);
 					double startCandidate = endTimes.get(acqWindowPrev) + rollAngleTransitionTimePrev;
+
+					// break loop if already too far
+					if (startCandidate > acqWindow.latestStart){
+						return -1;
+					}
+
 					if (i < acqWindows.size()-1){
 
 						AcquisitionWindow acqWindowNext = acqWindows.get(i+1);
+
 						double rollAngleTransitionTimeNext = planningProblem.getTransitionTime(acqWindowNext, acqWindow);
 						double nextWindowStart = startTimes.get(acqWindowNext);
 						double startTime = Math.max(startCandidate, acqWindow.earliestStart);
@@ -368,6 +383,7 @@ public class AcquisitionPlannerACO {
 				// Not feasible
 				return -1;
 			}
+
 		}
 
 		public boolean isFeasible(){
@@ -486,7 +502,7 @@ public class AcquisitionPlannerACO {
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
 		/* Parameters **/
-		int nRuns = 10;
+		int nRuns = 500;
 		double progressionRewardExp = 50; // reward exponent when the fitness increases
 		double regressionRewardExp = 45; // penalty exponent when the fitness decreases
 		double progressionRewardMult = 200; // reward mult when the fitness increases
@@ -514,9 +530,12 @@ public class AcquisitionPlannerACO {
 		double[] prio0Array = new double[nRuns];
 		double[] prio1Array = new double[nRuns];
 		double[] totalArray = new double[nRuns];
+		double[] timeArray = new double[nRuns];
 
 		/** MAIN LOOP */ 
 		for (int i=0; i<nRuns; i++){
+			long startFuncTime = System.nanoTime();
+
 			planner.reset();
 			planner.planAcquisitions();	
 			// Evaluate fitness
@@ -549,7 +568,9 @@ public class AcquisitionPlannerACO {
 				
 			}
 
-			System.out.println("Generation " + (i+1) + " | Tot " + (count[0] + count[1]) + " | P0 " + count[0] + " | P1 " + count[1] + " | Fitness " + String.format("% .2f", fitness) + " | UpScore " + String.format("% .2f", updateScore) + " | Ndrawns : " + planner.drawnWindows.size() + " | Value0 " + String.format("% .2f", val0) + " | Value1 " + String.format("% .2f", val1));
+			long endFuncTime = System.nanoTime();
+			System.out.print(String.format("% .2f",(endFuncTime - startFuncTime)/1000000000.0) + " s | ");
+			System.out.println("Gen " + (i+1) + " | Tot " + (count[0] + count[1]) + " | P0 " + count[0] + " | P1 " + count[1] + " | Fitness " + String.format("% .2f", fitness) + " | UpScore " + String.format("% .2f", updateScore) + " | Ndrawns : " + planner.drawnWindows.size() + " | Val0 " + String.format("% .2f", val0) + " | Val " + String.format("% .2f", val1));
 
 			// planner.multPheromones(updateScore);
 			planner.addPheromones(updateScore);
@@ -561,6 +582,7 @@ public class AcquisitionPlannerACO {
 			prio0Array[i] += count[0];
 			prio1Array[i] += count[1];
 			totalArray[i] += count[0] + count[1];
+			timeArray[i] = ((endFuncTime - startFuncTime)/1000000.0);
 
 			previousFitness = fitness;
 		}
@@ -617,6 +639,43 @@ public class AcquisitionPlannerACO {
 
 		countPlot.save("plot_count", "png");
 		scorePlot.save("plot_score", "png");
+
+		String name_csv = Params.constellation + "_" + Params.horizon + "_ACO_n" + nRuns + ".csv";
+		BufferedWriter br = new BufferedWriter(new FileWriter("results/" + name_csv));
+		StringBuilder sb = new StringBuilder();
+
+		// Header
+		sb.append("Iteration");
+		sb.append(";");
+		sb.append("Time (ms)");
+		sb.append(";");
+		sb.append("Fitness");
+		sb.append(";");
+		sb.append("Prio0");
+		sb.append(";");
+		sb.append("Prio1");
+		sb.append(";");
+		sb.append("Total");
+		sb.append("\n");
+
+		// Append strings from array
+		for (int i=0; i<fitnessArray.length; i++) {
+			sb.append((iterationArray[i]+1));
+			sb.append(";");
+			sb.append(timeArray[i]);
+			sb.append(";");
+			sb.append(fitnessArray[i]);
+			sb.append(";");
+			sb.append(prio0Array[i]);
+			sb.append(";");
+			sb.append(prio1Array[i]);
+			sb.append(";");
+			sb.append(totalArray[i]);
+			sb.append("\n");
+		}
+
+		br.write(sb.toString());
+		br.close();
 
 		System.out.println("Acquisition planning done");
 	}

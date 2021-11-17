@@ -204,6 +204,21 @@ public class AcquisitionPlannerRandom {
 		}
 	}
 
+	public double computeReferenceFitness(){
+		List<AcquisitionWindow> awList = selectBestWindows();
+		return computeFitness(awList, 1.0);
+	}
+
+	public List<AcquisitionWindow> selectBestWindows() { // select best window by coverage
+		List<AcquisitionWindow> awList = new ArrayList<AcquisitionWindow>();
+		for (CandidateAcquisition acquisition : planningProblem.candidateAcquisitions) {
+			try{
+				awList.add(Collections.max(acquisition.acquisitionWindows, cloudComparator));
+			}catch(java.util.NoSuchElementException e){}
+		}
+		return awList;
+	}
+
 	public Integer[] computeAmount(){
 		Integer[] cntByPriority = {0, 0};
 		int cntTotal = 0;
@@ -214,6 +229,24 @@ public class AcquisitionPlannerRandom {
 			cntTotal ++; 
 		}
 		return cntByPriority;
+	}
+
+	public double computeFitness(List<AcquisitionWindow> awList, double referenceFitness) {
+		// Reset count
+		double cntFitness = 0.0;
+
+		// Count
+		for (AcquisitionWindow aw : awList) {
+			Acquisition acq = aw.candidateAcquisition;
+			if (acq.priority == 0) {
+				cntFitness += (1-aw.cloudProba) * 10;
+			}
+			if (acq.priority == 1) {
+				cntFitness += (1-aw.cloudProba) * 1;
+			}
+		}
+		double fitness = cntFitness / referenceFitness;
+		return fitness;
 	}
 
 	/** Comparator used for sorting acquisition windows by increasing earliest start time */
@@ -258,37 +291,105 @@ public class AcquisitionPlannerRandom {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
-		int nRuns = 100;
+		int nRuns = 500;
 
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
 		AcquisitionPlannerRandom planner = new AcquisitionPlannerRandom(pb);
+
+		double referenceFitness = planner.computeReferenceFitness();
+		// Statistics
+		double maxFitness = 0.0;
+		int idxMaxFitness = 0;
 		int cntMax = 0;
 		int idxMaxCnt = 0;
+		double[] fitnessArray = new double[nRuns];
+		double[] iterationArray = new double[nRuns];
+		double[] prio0Array = new double[nRuns];
+		double[] prio1Array = new double[nRuns];
+		double[] totalArray = new double[nRuns];
+		double[] timeArray = new double[nRuns];
 
 		for (int i=0; i<nRuns; i++){
+			long startFuncTime = System.nanoTime();
+
 			planner.reset();
 			planner.planAcquisitions();	
 			// Count
 			Integer[] count = planner.computeAmount();
 			int cntTotal = count[0] + count[1];
 
-			if (cntTotal > cntMax) {
-				cntMax = cntTotal;
-				idxMaxCnt = i;
+			// Fitness for comparison with ACO
+			double fitness = planner.computeFitness(planner.selectedWindows, referenceFitness);
+
+			long endFuncTime = System.nanoTime();
+			System.out.print(String.format("% .2f",(endFuncTime - startFuncTime)/1000000000.0) + " s | ");
+
+			iterationArray[i] = (double) i + 1;
+			timeArray[i] = ((endFuncTime - startFuncTime)/1000000.0);
+			if (fitness > maxFitness) {
+				maxFitness = fitness;
+				idxMaxFitness = i;
 				// Save the plan
 				for(Satellite satellite : pb.satellites){
 					planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
 				}
-			}
+				fitnessArray[i] = fitness;
+				prio0Array[i] += count[0];
+				prio1Array[i] += count[1];
+				totalArray[i] += count[0] + count[1];
 
+			}else{
+				// Count
+				fitnessArray[i] = fitnessArray[i-1];
+				prio0Array[i] = prio0Array[i-1];
+				prio1Array[i] = prio1Array[i-1];
+				totalArray[i] = totalArray[i-1];
+			}
 
 			System.out.println("Generation " + (i+1) + " | Tot " + (count[0] + count[1]) + " | P0 " + count[0] + " | P1 " + count[1]);
 
 		}
 
-		System.out.println("Max Cnt of " + cntMax + " at generation " + (idxMaxCnt+1));
+		String name_csv = Params.constellation + "_" + Params.horizon + "_RNG_n" + nRuns + ".csv";
+		BufferedWriter br = new BufferedWriter(new FileWriter("results/" + name_csv));
+		StringBuilder sb = new StringBuilder();
+
+		// Header
+		sb.append("Iteration");
+		sb.append(";");
+		sb.append("Time (ms)");
+		sb.append(";");
+		sb.append("Fitness");
+		sb.append(";");
+		sb.append("Prio0");
+		sb.append(";");
+		sb.append("Prio1");
+		sb.append(";");
+		sb.append("Total");
+		sb.append("\n");
+
+		// Append strings from array
+		for (int i=0; i<iterationArray.length; i++) {
+			sb.append(iterationArray[i]);
+			sb.append(";");
+			sb.append(timeArray[i]);
+			sb.append(";");
+			sb.append(fitnessArray[i]);
+			sb.append(";");
+			sb.append(prio0Array[i]);
+			sb.append(";");
+			sb.append(prio1Array[i]);
+			sb.append(";");
+			sb.append(totalArray[i]);
+			sb.append("\n");
+		}
+
+		br.write(sb.toString());
+		br.close();
+
+		System.out.println("Max fitness of " + maxFitness + " at generation " + (idxMaxFitness+1));
 		System.out.println("Acquisition planning done");
 	}
 	

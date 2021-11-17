@@ -362,7 +362,7 @@ public class AcquisitionPlannerACOGlobal {
 
 	public double computeReferenceFitness(){
 		List<AcquisitionWindow> awList = selectBestWindows();
-		return computeFitness(awList, 100.0);
+		return computeFitness(awList, 1.0);
 	}
 
 	public List<AcquisitionWindow> selectBestWindows() { // select best window by coverage
@@ -387,7 +387,7 @@ public class AcquisitionPlannerACOGlobal {
 				cntFitness += (1-aw.cloudProba) * 1;
 			}
 		}
-		double fitness = 100*cntFitness / referenceFitness;
+		double fitness = cntFitness / referenceFitness;
 		return fitness;
 	}
 
@@ -445,8 +445,11 @@ public class AcquisitionPlannerACOGlobal {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
-		int nRuns = 10;
-		int searchDepth = 20;
+		int nRuns = 200;
+		int searchDepth = 5;
+		double progressionRewardMult = 300; // reward mult when the fitness increases
+		double regressionRewardMult = 50; // penalty mult when the fitness decreases
+		double decayRate = 0.025; // decay rate
 
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
@@ -455,11 +458,23 @@ public class AcquisitionPlannerACOGlobal {
 
 		// Reference fitness
 		double referenceFitness = planner.computeReferenceFitness();
+		double previousFitness = 0.0;
 		System.out.println("Reference Fitness " + String.format("% .2f", referenceFitness));
+		double updateScore = 0.0;
+
+		// Statistics
+		double maxFitness = 0.0;
+		double minFitness = 100000.0;
+		int idxMaxFitness = 0;
 		double[] fitnessArray = new double[nRuns];
 		double[] iterationArray = new double[nRuns];
+		double[] prio0Array = new double[nRuns];
+		double[] prio1Array = new double[nRuns];
+		double[] totalArray = new double[nRuns];
 
 		for (int i=0; i<nRuns; i++){
+			long startFuncTime = System.nanoTime();
+
 			planner.reset();
 			planner.planAcquisitions();	
 			// Evaluate fitness
@@ -467,22 +482,43 @@ public class AcquisitionPlannerACOGlobal {
 			double fitness = planner.computeFitness(planner.selectedWindows, referenceFitness);
 			Integer[] count = planner.computeAmount();
 
+			if (fitness > maxFitness) {
+				maxFitness = fitness;
+				idxMaxFitness = i;
+				// Save the plan
+				for(Satellite satellite : pb.satellites){
+					planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
+				}
+			}else if (fitness < minFitness){
+				minFitness = fitness;
+			}
+
+			if (i>0) {
+				// double relativeFitness = fitness/previousFitness;
+				double diffFitness = fitness - previousFitness;
+				if (diffFitness > 0) {
+					updateScore = diffFitness * progressionRewardMult;
+					// updateScore = Math.pow(relativeFitness,  progressionRewardExp);
+				}else{
+					updateScore = diffFitness * regressionRewardMult;
+				}	
+			}
+
 			double val0 = planner.pheronomes.get(pb.acquisitionWindows.get(367));
 			double val1 = planner.pheronomes.get(pb.acquisitionWindows.get(423));
 
-			System.out.println("Generation " + (i+1) + " | P0 " + count[0] + " | P1 " + count[1] + " | Score " + String.format("% .2f", fitness) + " | Value0 " + String.format("% .2f", val0) + " | Value1 " + String.format("% .2f", val1));
+			long endFuncTime = System.nanoTime();
+			System.out.print(String.format("% .2f",(endFuncTime - startFuncTime)/1000000000.0) + " s | ");
+			System.out.println("Gen " + (i+1) + " | P0 " + count[0] + " | P1 " + count[1] + " | Fitness " + String.format("% .2f", fitness) + " | UpScore " + String.format("% .2f", updateScore) + " | Value0 " + String.format("% .2f", val0) + " | Value1 " + String.format("% .2f", val1));
 
-			planner.updatePheromones(fitness / 30);
-			planner.decayPheromones(0.3);
+			// Count
 			fitnessArray[i] = fitness;
 			iterationArray[i] = (double) i;
+			prio0Array[i] += count[0];
+			prio1Array[i] += count[1];
+			totalArray[i] += count[0] + count[1];
 
-	/* 		int cnt = 0;
-			for (AcquisitionWindow aw:pb.acquisitionWindows){
-				String val2 = String.format("% .2f", planner.pheronomes.get(aw));
-				System.out.println(cnt + " pheromone" + val2);
-				cnt ++;
-			} */
+			previousFitness = fitness;
 		}
 
 		Plot plot = Plot.plot(Plot.plotOpts().
@@ -504,7 +540,49 @@ public class AcquisitionPlannerACOGlobal {
 		for(Satellite satellite : pb.satellites){
 			planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
 		}
-		System.out.println("Acquisition planning done");
+
+		System.out.println("Max Fitness of " + String.format("% .2f", maxFitness) + " at generation " + idxMaxFitness);
+
+		double minY = minFitness - (maxFitness - minFitness) * 0.1;
+		double maxY = maxFitness + (maxFitness - minFitness) * 0.1;
+		Plot scorePlot = Plot.plot(Plot.plotOpts().
+			title("Fitness Evolution").
+			legend(Plot.LegendFormat.NONE)).
+			xAxis("Run", Plot.axisOpts().
+				range(0, nRuns)).
+			yAxis("Fitness", Plot.axisOpts().
+				range(minY, maxY)). 
+			series("Fitness", Plot.data().
+				xy(iterationArray, fitnessArray),
+			Plot.seriesOpts().
+				marker(Plot.Marker.NONE).
+				color(Color.BLUE));
+
+		Plot countPlot = Plot.plot(Plot.plotOpts().
+				title("Number of windows evolution").
+				legend(Plot.LegendFormat.BOTTOM)).
+				xAxis("Run", Plot.axisOpts().
+					range(0, nRuns)).
+				yAxis("Count", Plot.axisOpts().
+					range(0, planner.planningProblem.candidateAcquisitions.size())).
+				series("Prio0", Plot.data().
+					xy(iterationArray, prio0Array),
+				Plot.seriesOpts().
+					marker(Plot.Marker.NONE).
+					color(Color.RED)).
+				series("Prio1", Plot.data().
+					xy(iterationArray, prio1Array),
+				Plot.seriesOpts().
+					marker(Plot.Marker.NONE).
+					color(Color.BLUE)).
+				series("Total", Plot.data().
+					xy(iterationArray, totalArray),
+				Plot.seriesOpts().
+					marker(Plot.Marker.NONE).
+					color(Color.BLACK));;;
+
+		countPlot.save("plot_count", "png");
+		scorePlot.save("plot_score", "png");
 	}
 	
 }
