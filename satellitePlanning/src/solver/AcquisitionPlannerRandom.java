@@ -291,7 +291,7 @@ public class AcquisitionPlannerRandom {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
-		int nRuns = 500;
+		int nRuns = 10000;
 
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);

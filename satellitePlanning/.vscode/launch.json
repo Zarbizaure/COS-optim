@@ -1,0 +1,147 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Launch AcquisitionPlannerTask",
+            "request": "launch",
+            "mainClass": "solver.AcquisitionPlannerTask",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "Launch JCommon",
+            "request": "launch",
+            "mainClass": "org.jfree.JCommon",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch ClassPathDebugger",
+            "request": "launch",
+            "mainClass": "org.jfree.base.ClassPathDebugger",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch JFreeChart",
+            "request": "launch",
+            "mainClass": "org.jfree.chart.JFreeChart",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch BarChartDemo1",
+            "request": "launch",
+            "mainClass": "org.jfree.chart.demo.BarChartDemo1",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch PieChartDemo1",
+            "request": "launch",
+            "mainClass": "org.jfree.chart.demo.PieChartDemo1",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch TimeSeriesChartDemo1",
+            "request": "launch",
+            "mainClass": "org.jfree.chart.demo.TimeSeriesChartDemo1",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch RadialLayout",
+            "request": "launch",
+            "mainClass": "org.jfree.layout.RadialLayout",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch AcquisitionPlannerACO",
+            "request": "launch",
+            "mainClass": "solver.AcquisitionPlannerACO",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch AcquisitionPlannerACOGlobal",
+            "request": "launch",
+            "mainClass": "solver.AcquisitionPlannerACOGlobal",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch AcquisitionPlannerGreedy",
+            "request": "launch",
+            "mainClass": "solver.AcquisitionPlannerGreedy",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch AcquisitionPlannerRandom",
+            "request": "launch",
+            "mainClass": "solver.AcquisitionPlannerRandom",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch BadAcquisitionPlannerGreedy",
+            "request": "launch",
+            "mainClass": "solver.BadAcquisitionPlannerGreedy",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch BadAcquisitionPlannerMIP",
+            "request": "launch",
+            "mainClass": "solver.BadAcquisitionPlannerMIP",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch BadDownloadPlanner",
+            "request": "launch",
+            "mainClass": "solver.BadDownloadPlanner",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch DownloadPlanner",
+            "request": "launch",
+            "mainClass": "solver.DownloadPlanner",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch EvalPerf",
+            "request": "launch",
+            "mainClass": "solver.EvalPerf",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch PlanViewer",
+            "request": "launch",
+            "mainClass": "solver.PlanViewer",
+            "projectName": "satellitePlanning"
+        },
+        {
+            "type": "java",
+            "name": "Launch Test",
+            "request": "launch",
+            "mainClass": "solver.Test",
+            "projectName": "satellitePlanning"
+        }
+    ]
+}

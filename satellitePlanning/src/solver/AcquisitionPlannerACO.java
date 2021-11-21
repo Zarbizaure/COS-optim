@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
-import java.util.LinkedList;
 
 import javax.xml.stream.FactoryConfigurationError;
 import javax.xml.stream.XMLStreamException;
@@ -24,10 +23,8 @@ import problem.CandidateAcquisition;
 import problem.PlanningProblem;
 import problem.ProblemParserXML;
 import problem.Satellite;
-import solver.EvalPerf;
 import plot.Plot;
 import java.awt.Color;
-import java.util.stream.IntStream;
 
 
 /**
@@ -291,10 +288,10 @@ public class AcquisitionPlannerACO {
 			return startTimes.get(aw);
 		}
 
-		public double getEnd(AcquisitionWindow aw){
+/* 		public double getEnd(AcquisitionWindow aw){
 			return endTimes.get(aw);
 
-		}
+		} */
 
 		public List<AcquisitionWindow> getAcqWindows(){
 			return acqWindows;
@@ -449,12 +446,12 @@ public class AcquisitionPlannerACO {
 
 	public Integer[] computeAmount(){
 		Integer[] cntByPriority = {0, 0};
-		int cntTotal = 0;
+		// int cntTotal = 0;
 		// Count
 		for (AcquisitionWindow aw : selectedWindows) {
 			Acquisition acq = aw.candidateAcquisition;
 			cntByPriority[acq.priority] ++;
-			cntTotal ++; 
+			// cntTotal ++; 
 		}
 		return cntByPriority;
 	}
@@ -474,12 +471,12 @@ public class AcquisitionPlannerACO {
 		}		
 	};
 
-	private final Comparator<AcquisitionWindow> priorityComparator = new Comparator<AcquisitionWindow>(){
+/* 	private final Comparator<AcquisitionWindow> priorityComparator = new Comparator<AcquisitionWindow>(){
 		@Override
 		public int compare(AcquisitionWindow w0, AcquisitionWindow w1) {
 			return Double.compare(w0.candidateAcquisition.priority, w1.candidateAcquisition.priority);
 		}		
-	};
+	}; */
 
 	/**
 	 * Write the acquisition plan of a given satellite in a file
@@ -503,8 +500,8 @@ public class AcquisitionPlannerACO {
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
 		/* Parameters **/
 		int nRuns = 500;
-		double progressionRewardExp = 50; // reward exponent when the fitness increases
-		double regressionRewardExp = 45; // penalty exponent when the fitness decreases
+		// double progressionRewardExp = 50; // reward exponent when the fitness increases
+		// double regressionRewardExp = 45; // penalty exponent when the fitness decreases
 		double progressionRewardMult = 200; // reward mult when the fitness increases
 		double regressionRewardMult = 50; // penalty mult when the fitness decreases
 		double decayRate = 0.025; // decay rate

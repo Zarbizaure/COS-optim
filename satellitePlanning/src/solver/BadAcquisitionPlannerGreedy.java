@@ -173,6 +173,8 @@ public class BadAcquisitionPlannerGreedy {
 
 	
 	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException{
+		long startFuncTime = System.nanoTime();
+
 		ProblemParserXML parser = new ProblemParserXML(); 
 		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
 		pb.printStatistics();
@@ -181,6 +183,8 @@ public class BadAcquisitionPlannerGreedy {
 		for(Satellite satellite : pb.satellites){
 			planner.writePlan(satellite, "output/solutionAcqPlan_"+satellite.name+".txt");
 		}
+		long endFuncTime = System.nanoTime();
+		System.out.print(String.format("% .2f",(endFuncTime - startFuncTime)/1000000000.0) + " s | ");
 		System.out.println("Acquisition planning done");
 	}
 	

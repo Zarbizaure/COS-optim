@@ -110,6 +110,26 @@ public class EvalPerf {
 				this.cntByCoverage += (1-cloudProba);
 			}
 		}
+	
+		public double computeFitness(List<CandidateAcquisition> acqList, double referenceFitness) {
+			// Reset count
+			double cntFitness = 0.0;
+	
+			// Count
+			for (CandidateAcquisition acq : acqList) {
+				AcquisitionWindow aw = acq.selectedAcquisitionWindow;
+				if (Objects.nonNull(aw)) {
+					if (acq.priority == 0) {
+						cntFitness += (1-aw.cloudProba) * 10;
+					}
+					if (acq.priority == 1) {
+						cntFitness += (1-aw.cloudProba) * 1;
+					}
+				}
+			}
+			double fitness = cntFitness / referenceFitness;
+			return fitness;
+		}
 
 		/** Comparator used to choose an acquisitionWindow based on best cloud coverage */
 		private final Comparator<AcquisitionWindow> cloudProbaComparator = new Comparator<AcquisitionWindow>(){
@@ -131,6 +151,10 @@ public class EvalPerf {
 		resPlan.count();
 		resCand.count();
 
+		// Compute fitness
+		double referenceFitness =  resCand.computeFitness(plan.pb.candidateAcquisitions, 1.0);
+		double fitness = resPlan.computeFitness(plan.plannedAcquisitions, referenceFitness);
+
 		// Compute ratio
 		double ratioTotal = (double) resPlan.cntTotal / resCand.cntTotal;
 		double[] ratioByPriority = {0.0,0.0};
@@ -139,6 +163,8 @@ public class EvalPerf {
 		double ratioByCoverage = resPlan.cntByCoverage / resCand.cntByCoverage;
 
 		// Print
+		System.out.println("Fitness (%): " + String.format("%.2f",fitness*100));
+
 		System.out.println("Acquisition Total (plan/cand): " + String.format("%.2f",ratioTotal) + " (" + resPlan.cntTotal + "/" + resCand.cntTotal + ")");
 
 		System.out.println("Acquisition Prio0 (plan/cand): " + String.format("%.2f",ratioByPriority[0]) + " (" + resPlan.cntByPriority[0] + "/" + resCand.cntByPriority[0] + ")");

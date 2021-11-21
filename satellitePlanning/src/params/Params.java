@@ -5,11 +5,11 @@ public class Params {
 	/** Constellation considered */
 	//public final static String constellation = "02sat";
 	//public final static String constellation = "08sat";
-	public final static String constellation = "02sat";
+	public final static String constellation = "18sat";
 	/** Planning horizon considered */
 	//public final static String horizon = "04h"; 
-	public final static String horizon = "12h";
-	// public final static String horizon = "24h";
+	// public final static String horizon = "12h";
+	public final static String horizon = "24h";
 	/** File containing a description of all static data (satellites, users, stations) */
 	public final static String systemDataFile = "data/system_data_"+constellation+".xml";
 	/** File containing a description of all dynamic data (candidate acquisitions, recorded acquisitions...) */
